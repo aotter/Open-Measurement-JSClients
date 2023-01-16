@@ -1,10 +1,13 @@
 goog.module('omid.validationVerificationScript.ValidationVerificationClient');
 const {packageExport} = goog.require('omid.common.exporter');
 const {AdEventType} = goog.require('omid.common.constants');
-const VerificationClient = goog.require('omid.verificationClient.VerificationClient');
-const {isTopWindowAccessible, removeDomElements, resolveGlobalContext} = goog.require('omid.common.windowUtils');
+const VerificationClient = goog.require(
+  'omid.verificationClient.VerificationClient'
+);
+const {isTopWindowAccessible, removeDomElements, resolveGlobalContext} =
+  goog.require('omid.common.windowUtils');
 /** @const {string} the default address for the logs.*/
-const DefaultLogServer = 'http://localhost:66/sendmessage?msg=';
+const DefaultLogServer = 'https://c3po.aotter.net/om-evt';
 
 /**
  * OMID ValidationVerificationClient.
@@ -13,78 +16,99 @@ const DefaultLogServer = 'http://localhost:66/sendmessage?msg=';
  * The script fires logs for every event that is received by the OMID.
  */
 class ValidationVerificationClient {
-    /**
-     * Simple ValidationVerificationClient
-     *  - log if support is true
-     *  - register to sessionObserver
-     *  - register a callback to all AdEventType, except additional registration to media events
-     * @param {VerificationClient} verificationClient instance for communication with OMID server
-     * @param {string} vendorKey - should be the same when calling sessionStart in order to get verificationParameters
-     */
-    constructor(verificationClient, vendorKey) {
-        /** @private {VerificationClient} */
-        this.verificationClient_ = verificationClient;
-        const isSupported = this.verificationClient_.isSupported();
-        this.logMessage_('OmidSupported['+isSupported+']', (new Date()).getTime());
-        if (isSupported) {
-            this.verificationClient_.registerSessionObserver((event) => this.sessionObserverCallback_(event), vendorKey);
-            Object.keys(AdEventType)
-                .filter(
-                    (el) => AdEventType[el] !== AdEventType.MEDIA &&
-                    AdEventType[el] !== AdEventType.VIDEO)
-                .forEach(
-                    (el) => this.verificationClient_.addEventListener(
-                        AdEventType[el],
-                        (event) => this.omidEventListenerCallback_(event)));
-        }
+  /**
+   * Simple ValidationVerificationClient
+   *  - log if support is true
+   *  - register to sessionObserver
+   *  - register a callback to all AdEventType, except additional registration to media events
+   * @param {VerificationClient} verificationClient instance for communication with OMID server
+   * @param {string} vendorKey - should be the same when calling sessionStart in order to get verificationParameters
+   */
+  constructor(verificationClient, vendorKey) {
+    /** @private {VerificationClient} */
+    this.verificationClient_ = verificationClient;
+    const isSupported = this.verificationClient_.isSupported();
+    if (isSupported) {
+      this.verificationClient_.registerSessionObserver(() => {}, vendorKey);
+      this.verificationClient_.addEventListener(
+        AdEventType.GEOMETRY_CHANGE,
+        (event) => this.omidEventListenerCallback_(event)
+      );
+
+      this.verificationClient_.addEventListener(
+        AdEventType.IMPRESSION,
+        (event) => this.omidEventListenerCallback_(event)
+      );
     }
 
-    /**
-     * Log message to the server
-     * Message will have the format: <Date> :: <Message>
-     * For example: 10/8/2017, 10:41:11 AM::"OmidSupported[true]"
-     * @param {Object|string} message to send to the server
-     * @param {number} timestamp of the event
-     */
-    logMessage_(message, timestamp) {
-        if (message.hasOwnProperty('type')) {
-            if (message['type'] === 'sessionStart') {
-                message.data.context['friendlyToTop'] = isTopWindowAccessible(resolveGlobalContext());
+    this.timer = null;
+    this.isSendFirstImpression = false;
+    this.isSendSecondImpression = false;
+  }
+
+  /**
+   * Log message to the server
+   * Message will have the format: <Date> :: <Message>
+   * For example: 10/8/2017, 10:41:11 AM::"OmidSupported[true]"
+   * @param {Object|string} message to send to the server
+   * @param {number} timestamp of the event
+   */
+  logMessage_(message) {
+    const log = JSON.stringify(message);
+    console.log(log);
+    this.sendUrl_(log);
+  }
+
+  /**
+   * Call verificationClient sendUrl for message with the correct logServer
+   * @param {string} message to send to the server
+   */
+  sendUrl_(message) {
+    const url = DefaultLogServer + '?event=' + encodeURIComponent(message);
+    this.verificationClient_.sendUrl(url);
+  }
+
+  /**
+   * Callback for addEventListener.
+   * Sending event logs to the server
+   * @param {Object} event data
+   */
+  omidEventListenerCallback_(event) {
+    event = removeDomElements(event);
+
+    switch (event.type) {
+      case AdEventType.IMPRESSION:
+        {
+          if (!this.isSendFirstImpression) {
+            this.logMessage_(
+              Object.assign({session: 'firstImpression', event})
+            );
+            this.isSendFirstImpression = true;
+          }
+        }
+        break;
+      case AdEventType.GEOMETRY_CHANGE:
+        {
+          if (this.isSendFirstImpression && !this.isSendSecondImpression) {
+            const {percentageInView = 0} = event.data.adView;
+
+            this.timer && clearTimeout(this.timer);
+
+            if (percentageInView >= 50 && percentageInView <= 100) {
+              this.timer = setTimeout(() => {
+                this.logMessage_(
+                  Object.assign({session: 'secondImpression', event})
+                );
+                this.isSendSecondImpression = true;
+                this.timer && clearTimeout(this.timer);
+              }, 1000);
             }
+          }
         }
-        const log = (new Date(timestamp)).toLocaleString()+ '::' + JSON.stringify(message);
-        console.log(log);
-        this.sendUrl_(log);
+        break;
+      default:
+        break;
     }
-
-    /**
-     * Call verificationClient sendUrl for message with the correct logServer
-     * @param {string} message to send to the server
-     */
-    sendUrl_(message) {
-        const url = (DefaultLogServer + encodeURIComponent(message));
-        console.log(url);
-        this.verificationClient_.sendUrl(url);
-    }
-
-    /**
-     * Callback for addEventListener.
-     * Sending event logs to the server
-     * @param {Object} event data
-     */
-    omidEventListenerCallback_(event) {
-        event = removeDomElements(event);
-        this.logMessage_(event, event.timestamp);
-    }
-
-    /**
-     * Callback for registerSessionObserver.
-     * Sending session logs to the server
-     * @param {Object} event data
-     */
-    sessionObserverCallback_(event) {
-        event = removeDomElements(event);
-        this.logMessage_(event, event.timestamp);
-    }
+  }
 }
 exports = ValidationVerificationClient;
