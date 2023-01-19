@@ -29,7 +29,10 @@ class ValidationVerificationClient {
     this.verificationClient_ = verificationClient;
     const isSupported = this.verificationClient_.isSupported();
     if (isSupported) {
-      this.verificationClient_.registerSessionObserver(() => {}, vendorKey);
+      this.verificationClient_.registerSessionObserver(
+        (event) => this.sessionObserverCallback_(event),
+        vendorKey
+      );
       this.verificationClient_.addEventListener(
         AdEventType.GEOMETRY_CHANGE,
         (event) => this.omidEventListenerCallback_(event)
@@ -54,6 +57,14 @@ class ValidationVerificationClient {
    * @param {number} timestamp of the event
    */
   logMessage_(message) {
+    if (message.hasOwnProperty('type')) {
+      if (message['type'] === 'sessionStart') {
+        message.data.context['friendlyToTop'] = isTopWindowAccessible(
+          resolveGlobalContext()
+        );
+      }
+    }
+
     const log = JSON.stringify(message);
     console.log(log);
     this.sendUrl_(log);
@@ -109,6 +120,15 @@ class ValidationVerificationClient {
       default:
         break;
     }
+  }
+  /**
+   * Callback for registerSessionObserver.
+   * Sending session logs to the server
+   * @param {Object} event data
+   */
+  sessionObserverCallback_(event) {
+    event = removeDomElements(event);
+    this.logMessage_(event, event.timestamp);
   }
 }
 exports = ValidationVerificationClient;
