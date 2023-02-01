@@ -30,7 +30,10 @@ class ValidationVerificationClient {
     const isSupported = this.verificationClient_.isSupported();
     if (isSupported) {
       this.verificationClient_.registerSessionObserver(
-        (event) => this.sessionObserverCallback_(event),
+        (event) => {
+          const {data = {}} = event;
+          this.verificationParameters = data.verificationParameters || '{}';
+        },
         vendorKey
       );
       this.verificationClient_.addEventListener(
@@ -57,13 +60,7 @@ class ValidationVerificationClient {
    * @param {number} timestamp of the event
    */
   logMessage_(message) {
-    if (message.hasOwnProperty('type')) {
-      if (message['type'] === 'sessionStart') {
-        message.data.context['friendlyToTop'] = isTopWindowAccessible(
-          resolveGlobalContext()
-        );
-      }
-    }
+    message.data.verificationParameters = this.verificationParameters;
 
     const log = JSON.stringify(message);
     console.log(log);
@@ -92,7 +89,7 @@ class ValidationVerificationClient {
         {
           if (!this.isSendFirstImpression) {
             this.logMessage_(
-              Object.assign({session: 'firstImpression', event})
+              Object.assign(event, {session: 'firstImpression'})
             );
             this.isSendFirstImpression = true;
           }
@@ -108,7 +105,7 @@ class ValidationVerificationClient {
             if (percentageInView >= 50 && percentageInView <= 100) {
               this.timer = setTimeout(() => {
                 this.logMessage_(
-                  Object.assign({session: 'secondImpression', event})
+                  Object.assign(event, {session: 'secondImpression'})
                 );
                 this.isSendSecondImpression = true;
                 this.timer && clearTimeout(this.timer);
@@ -120,15 +117,6 @@ class ValidationVerificationClient {
       default:
         break;
     }
-  }
-  /**
-   * Callback for registerSessionObserver.
-   * Sending session logs to the server
-   * @param {Object} event data
-   */
-  sessionObserverCallback_(event) {
-    event = removeDomElements(event);
-    this.logMessage_(event, event.timestamp);
   }
 }
 exports = ValidationVerificationClient;
