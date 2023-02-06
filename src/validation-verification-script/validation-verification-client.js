@@ -29,27 +29,22 @@ class ValidationVerificationClient {
     this.verificationClient_ = verificationClient;
     const isSupported = this.verificationClient_.isSupported();
     if (isSupported) {
-      this.verificationClient_.registerSessionObserver(
-        (event) => {
-          const {data = {}} = event;
-          this.verificationParameters = data.verificationParameters || '{}';
-        },
-        vendorKey
+      this.verificationClient_.registerSessionObserver((event) => {
+        const {data = {}} = event;
+        this.verificationParameters = data.verificationParameters || '{}';
+      }, vendorKey);
+      this.verificationClient_.addEventListener(
+        AdEventType.IMPRESSION,
+        (event) => this.omidEventListenerImpressionCallback_(event)
       );
       this.verificationClient_.addEventListener(
         AdEventType.GEOMETRY_CHANGE,
-        (event) => this.omidEventListenerCallback_(event)
-      );
-
-      this.verificationClient_.addEventListener(
-        AdEventType.IMPRESSION,
-        (event) => this.omidEventListenerCallback_(event)
+        (event) => this.omidEventListenerGeometryChangeCallback_(event)
       );
     }
 
     this.timer = null;
-    this.isSendFirstImpression = false;
-    this.isSendSecondImpression = false;
+    this.isSentView = false;
   }
 
   /**
@@ -77,45 +72,40 @@ class ValidationVerificationClient {
   }
 
   /**
-   * Callback for addEventListener.
+   * Callback for addEventListener impression.
    * Sending event logs to the server
    * @param {Object} event data
    */
-  omidEventListenerCallback_(event) {
+  omidEventListenerImpressionCallback_(event) {
     event = removeDomElements(event);
 
-    switch (event.type) {
-      case AdEventType.IMPRESSION:
-        {
-          if (!this.isSendFirstImpression) {
-            this.logMessage_(
-              Object.assign(event, {session: 'firstImpression'})
-            );
-            this.isSendFirstImpression = true;
-          }
-        }
-        break;
-      case AdEventType.GEOMETRY_CHANGE:
-        {
-          if (this.isSendFirstImpression && !this.isSendSecondImpression) {
-            const {percentageInView = 0} = event.data.adView;
+    this.logMessage_(Object.assign(event, {session: 'impression'}));
+  }
 
-            this.timer && clearTimeout(this.timer);
+  /**
+   * Callback for addEventListener geometry change.
+   * Sending event logs to the server
+   * @param {Object} event data
+   */
+  omidEventListenerGeometryChangeCallback_(event) {
+    event = removeDomElements(event);
+    const {percentageInView = 0} = event.data.adView;
 
-            if (percentageInView >= 50 && percentageInView <= 100) {
-              this.timer = setTimeout(() => {
-                this.logMessage_(
-                  Object.assign(event, {session: 'secondImpression'})
-                );
-                this.isSendSecondImpression = true;
-                this.timer && clearTimeout(this.timer);
-              }, 1000);
-            }
-          }
-        }
-        break;
-      default:
-        break;
+    if (this.isSentView) return;
+
+    if (!!this.timer) {
+      clearTimeout(this.timer);
+    }
+
+    if (
+      percentageInView >= 50 &&
+      percentageInView <= 100
+    ) {
+      this.timer = setTimeout(() => {
+        this.logMessage_(Object.assign(event, {session: 'view'}));
+        this.isSentView = true;
+        clearTimeout(this.timer);
+      }, 1000);
     }
   }
 }
