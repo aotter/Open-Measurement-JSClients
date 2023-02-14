@@ -1,6 +1,7 @@
 goog.module('omid.validationVerificationScript.ValidationVerificationClient');
 const {packageExport} = goog.require('omid.common.exporter');
 const {AdEventType} = goog.require('omid.common.constants');
+const {omidGlobal} = goog.require('omid.common.OmidGlobalProvider');
 const VerificationClient = goog.require(
   'omid.verificationClient.VerificationClient'
 );
@@ -8,6 +9,7 @@ const {isTopWindowAccessible, removeDomElements, resolveGlobalContext} =
   goog.require('omid.common.windowUtils');
 /** @const {string} the default address for the logs.*/
 const DefaultLogServer = 'https://c3po.aotter.net/om-evt';
+
 
 /**
  * OMID ValidationVerificationClient.
@@ -78,7 +80,6 @@ class ValidationVerificationClient {
    */
   omidEventListenerImpressionCallback_(event) {
     event = removeDomElements(event);
-
     this.logMessage_(Object.assign(event, {session: 'impression'}));
   }
 
@@ -91,10 +92,12 @@ class ValidationVerificationClient {
     event = removeDomElements(event);
     const {percentageInView = 0} = event.data.adView;
 
+    const {setTimeout, clearTimeout} = typeof omidGlobal.omidNative !== 'undefined' ? omidGlobal.omidNative : omidGlobal;
+
     if (this.isSentView) return;
 
     if (!!this.timer) {
-      clearTimeout(this.timer);
+        clearTimeout(this.timer);
     }
 
     if (
@@ -104,7 +107,7 @@ class ValidationVerificationClient {
       this.timer = setTimeout(() => {
         this.logMessage_(Object.assign(event, {session: 'view'}));
         this.isSentView = true;
-        clearTimeout(this.timer);
+            clearTimeout(this.timer);
       }, 1000);
     }
   }
