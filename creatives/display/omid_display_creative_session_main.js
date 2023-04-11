@@ -2,15 +2,7 @@ goog.module('omid.creatives.OmidCreativeSessionMain');
 
 const OmidCreativeSession = goog.require('omid.creatives.OmidCreativeSession');
 
-const omidSession = OmidCreativeSession.main([{
-  'resourceUrl': '[INSERT RESOURCE URL]',
-    'vendorKey': 'ignored',
-    'verificationParameters': 'ignored'
-}, {
-  'resourceUrl': 'https://s3-us-west-2.amazonaws.com/omsdk-files/js/verification-measurement-script.js',
-  'vendorKey': null,
-  'verificationParameters': null
-}]);
+const omidSession = OmidCreativeSession.main(window.TREK_OM_RES);
 omidSession.setCreativeType('htmlDisplay');
 omidSession.setImpressionType('loaded');
 omidSession.loaded();
